@@ -1,0 +1,71 @@
+# deliver.config.yaml — deliveryman skill 的项目级配置（全部字段可选）
+# 把这个文件放到项目根目录，deliveryman 自动加载
+
+# === output_root：把子目录上升为交付物根 ===
+# 典型场景：真正要交付的内容都在某个子目录里（如 packages/app/）。
+# 不声明则使用源项目根作为交付物根。
+# 项目本身是一个 skill 时不需要写这一项：user 档会自动认出 skill 文件夹并把它作为交付物根。
+# output_root: packages/app
+#
+# extras_from_root：output_root 之外但仍保留在交付物根的"门面"文件
+# 未声明时使用默认值：README* / LICENSE* / CHANGELOG* / CONTRIBUTING* / .gitignore / .gitattributes
+# extras_from_root:
+#   - "README*"
+#   - "LICENSE*"
+#   - "CHANGELOG*"
+
+# === user 档：四种形态，由本节字段和项目内容决定 ===
+# 有 user.entry            → 程序形态（点击即用；生成 RUN.bat/run.sh 启动器）
+# 无 entry 有 user.artifacts → 成品形态（仅点名成品文件，不含 README/LICENSE/启动器）
+# 皆无，且项目里正好有一个 skill → skill 形态（skill 文件夹里除测试外的全部文件 + 项目根的 README/LICENSE）
+# 皆无，其他情况            → 文档形态（README 即内容，无可执行入口）；项目里有 pdf/pptx/docx 等时推测为成品形态
+# entry 与 artifacts 可共存 = 程序形态 + artifacts 叠加为 include 增量。
+# artifacts 是 include 通道不是 keep 通道：blacklist 命中永远优先，artifacts:["**/*"] 不能复活 secret。
+user:
+  # --- 程序形态示例（≤5 行）---
+  # entry: dist/app.exe          # 相对源项目根：dist/MyApp.exe / index.html / build/main.js / bin/server
+  # build_cmd: npm run build     # 可选：打包前在源项目根执行；失败 fail-fast
+  # extra_include:               # 可选：额外纳入交付的 glob（叠加在 modes.user.include_globs 之上）
+  #   - "assets/**"
+
+  # --- 成品形态示例（≤5 行）：把写好的报告/论文/PPT/文档发给别人 ---
+  # artifacts:                   # 仅声明它（无 entry）= 成品形态；相对源项目根的路径/glob
+  #   - "reports/**/*.pdf"
+  #   - "slides/final.pptx"
+
+  # --- skill 形态与文档形态：不声明 entry 也不声明 artifacts ---
+  # （本节留空即可。推测出的形态会先在报告里给你确认）
+
+# === Office 隐私能力包：docx/pptx/xlsx 家族的 docProps 元数据清洗开关 ===
+# clean（默认，可省略）：L1 自动清洗 docProps——作者/最后修改者置空、修订号归 1、公司/模板/HyperlinkBase 清除；
+#                        全模式生效（含 dev）。时间戳字段有意保留（行为痕迹非身份）。
+# report_only        ：只报不改——L1 关闭、docProps 原样保留；L2 内部痕迹检测（批注/修订/隐藏表等）仍照常报数。
+# 逐个豁免走 redact_exclude（命中的 Office 文件 L1/L2 一并跳过、原样复制）。
+# office_metadata: clean
+
+# 自定义 redaction 正则（叠加在内置规则之上）
+# 可选 action 字段：redact（默认，替换）/ detect_only（只进 dry-run 报告，不替换）
+custom_redactions:
+  - name: internal_ticket_id
+    pattern: '\bMYCO-\d{4,8}\b'
+    replacement: '<REDACTED_TICKET>'
+    applies_to: ["*"]
+    risk: balanced
+    notes: "公司内部工单号"
+
+# redact_exclude：这些文件原样复制，跳过全部内容级规则（含 detect_only）。
+# 典型用途：文件本身含正则定义或刻意保留的示例路径，会被内置规则误改。
+# 命中的文件会在 dry-run 报告里单列一节，提醒人工确认。
+# redact_exclude:
+#   - "rules/redactions.yaml"
+#   - "tests/**"
+
+# 强制保留——覆盖任何 blacklist 命中
+keep:
+  - "docs/architecture.md"
+  - "examples/with-secrets/"   # 反例：这种用法要谨慎，scan 报告会标黄
+
+# 强制删除——追加在 blacklist 之上
+remove:
+  - "notes/personal-todo.md"
+  - "_drafts/"

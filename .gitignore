@@ -1,0 +1,10 @@
+# added by deliveryman skill
+output/deliver/
+deliver/
+
+# Python 运行缓存
+__pycache__/
+*.pyc
+
+# 本机缓存，不入库
+.brief-cache/

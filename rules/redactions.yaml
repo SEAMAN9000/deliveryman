@@ -1,0 +1,131 @@
+# redactions.yaml — 内容级 redaction 正则
+# 每条：name（规则名）、pattern（Python 正则）、replacement（替换；支持 \1 \2 反向引用）、
+#       applies_to（文件 glob 列表，"*" 表示全部）、risk（overmatch/undermatch/balanced）、notes、
+#       action（redact = 默认，sanitize 时替换；detect_only = 只进 dry-run 报告"疑似本机路径"节，永不替换）
+# risk 含义：
+#   - overmatch  = 可能误报，dry-run 报告应标红让用户确认
+#   - undermatch = 已知会漏一些变体，由用户在 deliver.config.yaml.custom_redactions 补充
+#   - balanced   = 已知边界已显式收窄
+#
+# ⚠️ 已知盲区（第一事实源，SKILL.md / README 的盲区描述与此同源）：
+#   1. 个人路径规则只认标准家目录（X:\Users\<name>、/Users/<name>/、/home/<name>/）。
+#      自定义工作根（如 D:\Some_space\...、/data/projects/...）由两层兜底：
+#      a) scan.py 运行时用真实项目根路径做字面 detect_only 匹配（零误报）；
+#      b) 下方 *_abs_path_loose 两条宽松 detect_only 规则（有误报，只报告不替换）。
+#      要真正替换，请在 deliver.config.yaml.custom_redactions 写项目专属规则。
+#   2. UNC 路径（\\server\share）含内网主机名，本版未覆盖。
+#   3. 非常见格式的 secret/token、二进制内嵌文本不在内容级规则范围。
+#   4. PDF：作者元数据 / 增量更新历史 / 隐藏图层 / XMP 数据包本工具不读不改，仅报告标注"发现 N 个 PDF，未清洗"。
+#   5. 图片 EXIF/GPS：拍摄设备、时间、经纬度等嵌入元数据本工具不读不改。
+#   6. ODF（OpenDocument .odt/.ods/.odp）的 meta.xml（作者/编辑周期）本版未覆盖，只按二进制原样复制。
+
+patterns:
+  - name: anthropic_api_key
+    pattern: 'sk-ant-[A-Za-z0-9_-]{20,}'
+    replacement: '<REDACTED_ANTHROPIC_KEY>'
+    applies_to: ["*"]
+    risk: balanced
+    notes: "排在 OpenAI 规则之前：两者都以 sk- 开头，先认更具体的"
+
+  - name: openai_api_key
+    pattern: 'sk-(?!ant-)[A-Za-z0-9_-]{20,}'
+    replacement: '<REDACTED_OPENAI_KEY>'
+    applies_to: ["*"]
+    risk: overmatch
+    notes: "可能命中字面量描述 secret 的文档片段；dry-run 报告会标出"
+
+  - name: github_pat_classic
+    pattern: '\bghp_[A-Za-z0-9]{36,}\b'
+    replacement: '<REDACTED_GITHUB_PAT>'
+    applies_to: ["*"]
+    risk: balanced
+    notes: ""
+
+  - name: github_pat_fine_grained
+    pattern: '\bgithub_pat_[A-Za-z0-9_]{60,}\b'
+    replacement: '<REDACTED_GITHUB_PAT>'
+    applies_to: ["*"]
+    risk: balanced
+    notes: ""
+
+  - name: aws_access_key
+    pattern: '\bAKIA[0-9A-Z]{16}\b'
+    replacement: '<REDACTED_AWS_KEY>'
+    applies_to: ["*"]
+    risk: balanced
+    notes: ""
+
+  - name: gcp_api_key
+    pattern: '\bAIza[0-9A-Za-z_-]{35}\b'
+    replacement: '<REDACTED_GCP_KEY>'
+    applies_to: ["*"]
+    risk: balanced
+    notes: ""
+
+  - name: bearer_jwt
+    pattern: 'Bearer\s+eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}'
+    replacement: 'Bearer <REDACTED_JWT>'
+    applies_to: ["*"]
+    risk: balanced
+    notes: ""
+
+  - name: pem_private_key_block
+    pattern: '-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]+?-----END [A-Z ]*PRIVATE KEY-----'
+    replacement: '<REDACTED_PRIVATE_KEY_BLOCK>'
+    applies_to: ["*"]
+    risk: balanced
+    notes: "PEM 块通常应被文件级删除；此条作为防线"
+
+  - name: windows_user_path
+    pattern: '([A-Za-z]:[\\\/])(Users|users)[\\\/]([^\\\/\s''\"<>:|?*]+)'
+    replacement: '\1Users\\<user>'
+    applies_to: ["*.md", "*.txt", "*.json", "*.yaml", "*.yml", "*.py", "*.js", "*.ts", "*.toml", "*.ini", "*.cfg", "*.log", "*.tex", "*.bib", "*.sty", "*.cls"]
+    risk: overmatch
+    notes: "可能改到合法引用；限制于文本类后缀，二进制不动。含 LaTeX 源（tex/bib/sty/cls）"
+
+  - name: macos_home_path
+    pattern: '/Users/([^/\s''\"<>:|?*]+)/'
+    replacement: '/Users/<user>/'
+    applies_to: ["*.md", "*.txt", "*.json", "*.yaml", "*.yml", "*.py", "*.js", "*.ts", "*.toml", "*.ini", "*.cfg", "*.log", "*.sh", "*.tex", "*.bib", "*.sty", "*.cls"]
+    risk: overmatch
+    notes: ""
+
+  - name: linux_home_path
+    pattern: '/home/([^/\s''\"<>:|?*]+)/'
+    replacement: '/home/<user>/'
+    applies_to: ["*.md", "*.txt", "*.json", "*.yaml", "*.yml", "*.py", "*.js", "*.ts", "*.toml", "*.ini", "*.cfg", "*.log", "*.sh", "*.tex", "*.bib", "*.sty", "*.cls"]
+    risk: overmatch
+    notes: ""
+
+  - name: git_author_email
+    pattern: '([Aa]uthor|[Ee]mail|[Cc]ommitter)\s*[:=]\s*[\w\.\-\+]+@[\w\.\-]+\.\w+'
+    replacement: '\1: <redacted-email>'
+    applies_to: ["*.md", "*.txt", "CHANGELOG*", "AUTHORS*", "CONTRIBUTORS*"]
+    risk: balanced
+    notes: ""
+
+  - name: private_ipv4
+    pattern: '\b(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})\b'
+    replacement: '<REDACTED_INTERNAL_IP>'
+    applies_to: ["*.md", "*.txt", "*.json", "*.yaml", "*.yml", "*.py", "*.js", "*.ts", "*.toml", "*.ini", "*.cfg", "*.log", "*.sh", "*.tex", "*.bib", "*.sty", "*.cls"]
+    risk: balanced
+    notes: ""
+
+  # ---- 第二梯队：宽松绝对路径检测（detect_only，只报告不替换）----
+  # 第一梯队是 scan.py 运行时注入的真实项目根字面匹配（见 _lib.project_path_detect_rules）。
+
+  - name: windows_abs_path_loose
+    pattern: '(?<![A-Za-z0-9])[A-Za-z]:[\\\/]+(?!(?:Windows|Program Files( \(x86\))?|ProgramData|PerfLogs|Users)[\\\/])[^\\\/\s''\"<>:|?*]+[\\\/]+[^\\\/\s''\"<>:|?*]+'
+    replacement: '<LOCAL_PATH>'
+    action: detect_only
+    applies_to: ["*.md", "*.txt", "*.json", "*.yaml", "*.yml", "*.py", "*.js", "*.ts", "*.toml", "*.ini", "*.cfg", "*.log", "*.tex", "*.bib", "*.sty", "*.cls"]
+    risk: overmatch
+    notes: "仅检测不替换。命中如 D:\\Some_space\\project\\x、E:\\work\\repo；不命中 C:\\Program Files\\App、C:\\Windows\\System32、URL、X:\\Users\\...（归 windows_user_path）。已知漏报：单段 D:\\secret、含空格段 D:\\My Projects\\x、UNC \\\\server\\share"
+
+  - name: posix_abs_path_loose
+    pattern: '(?<![\w.])\/(data|srv|mnt|media|opt|work|workspace|projects)\/[^\/\s''\"<>:|?*]+\/[^\/\s''\"<>:|?*]+'
+    replacement: '<LOCAL_PATH>'
+    action: detect_only
+    applies_to: ["*.md", "*.txt", "*.json", "*.yaml", "*.yml", "*.py", "*.js", "*.ts", "*.toml", "*.ini", "*.cfg", "*.log", "*.sh", "*.tex", "*.bib", "*.sty", "*.cls"]
+    risk: overmatch
+    notes: "仅检测不替换。根目录为枚举清单（data/srv/mnt/media/opt/work/workspace/projects），/usr /etc /var /tmp 故意不收。已知误报：/opt/homebrew/*；已知漏报：清单外的自定义根"

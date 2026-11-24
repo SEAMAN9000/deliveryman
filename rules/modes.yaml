@@ -1,0 +1,120 @@
+# modes.yaml — 三种受众模式的 include / exclude 规则
+# 每个模式：
+#   description       — 一句话用途
+#   include_globs     — 该模式默认要保留的文件 glob（在不被 blacklist 命中的前提下）
+#   exclude_extra     — 该模式额外排除（叠加在 blacklist 之上）
+#   requires_config   — 该模式必需的 deliver.config.yaml 字段（缺则 fail-fast）
+#   config_driven    — 该模式可选但会扩展行为的字段
+# include 与 blacklist 的优先级：blacklist 命中 > include；除非用户在 deliver.config.yaml.keep 显式保留
+
+modes:
+  dev:
+    description: "给开发者/贡献者——完整源码 + 开发文档 + tests + 构建脚本"
+    include_globs:
+      - "**/*.py"
+      - "**/*.js"
+      - "**/*.ts"
+      - "**/*.tsx"
+      - "**/*.jsx"
+      - "**/*.vue"
+      - "**/*.go"
+      - "**/*.rs"
+      - "**/*.java"
+      - "**/*.kt"
+      - "**/*.swift"
+      - "**/*.c"
+      - "**/*.h"
+      - "**/*.cpp"
+      - "**/*.hpp"
+      - "**/*.cs"
+      - "**/*.rb"
+      - "**/*.php"
+      - "**/*.sh"
+      - "**/*.bat"
+      - "**/*.ps1"
+      - "**/*.yaml"
+      - "**/*.yml"
+      - "**/*.toml"
+      - "**/*.json"
+      - "**/*.ini"
+      - "**/*.cfg"
+      - "**/*.tpl"
+      - "**/*.txt"
+      - "src/**"
+      - "lib/**"
+      - "app/**"
+      - "tests/**"
+      - "test/**"
+      - "spec/**"
+      - "docs/**"
+      - "examples/**"
+      - "scripts/**"
+      - "*.md"
+      - "LICENSE*"
+      - "CONTRIBUTING*"
+      - "CHANGELOG*"
+      - "AUTHORS*"
+      - "package.json"
+      - "package-lock.json"
+      - "yarn.lock"
+      - "pnpm-lock.yaml"
+      - "requirements*.txt"
+      - "pyproject.toml"
+      - "setup.py"
+      - "setup.cfg"
+      - "Pipfile*"
+      - "poetry.lock"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "go.mod"
+      - "go.sum"
+      - "pom.xml"
+      - "build.gradle*"
+      - "Makefile"
+      - "Dockerfile*"
+      - "*.dockerfile"
+      - "docker-compose*.yml"
+      - ".gitignore"
+      - ".gitattributes"
+      - ".editorconfig"
+    exclude_extra:
+      - "output/deliver/"
+      - "deliver/"
+      - "*.lock.json"   # 重复锁文件
+    requires_config: []
+    config_driven: []
+
+  user:
+    # user 档形态：user 按 deliver.config.yaml 推导 program（user.entry）/
+    # document（皆无）/ artifact（user.artifacts）。下方 include_globs 仅供 program/document
+    # 两形态使用；artifact 形态 include = user.artifacts（整套绕过本清单）。
+    description: "给最终使用者/内容接收者——按 config 分程序/文档/成品/skill 四种形态"
+    # include 用【前导 / 根锚定】写法：只收项目根一层的门面文件，不误收深层同名文件。
+    # 有意删除裸 "*.md"（过收 = 泄漏向：会带出根级任意笔记）。docs/** 有意【不】整收——
+    # 只点名 user/screenshots/demo/showcase 四个面向使用者的子目录，避免带出 ADR/设计稿。
+    include_globs:
+      - "/README*"
+      - "/LICENSE*"
+      - "/NOTICE*"
+      - "/CHANGELOG*"
+      - "/QUICKSTART*"
+      - "/GETTING_STARTED*"
+      - "/USAGE*"
+      - "docs/user/**"
+      - "docs/screenshots/**"
+      - "docs/demo/**"
+      - "docs/showcase/**"
+      - "assets/**"
+      - "examples/**"
+    exclude_extra:
+      - "output/deliver/"
+      - "deliver/"
+      - "tests/"
+      - "test/"
+      - "spec/"
+      - "src/"        # user 档默认不带源码；用 deliver.config.yaml.user.extra_include 显式包含
+    requires_config: []   # entry 不再必填（document/artifact 形态无 entry）
+    config_driven:
+      - "user.build_cmd"
+      - "user.extra_include"
+      - "user.artifacts"   # 各形态均可叠加为 include 增量；仅声明它（无 entry）= artifact 形态

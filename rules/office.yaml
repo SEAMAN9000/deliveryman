@@ -1,0 +1,60 @@
+# office.yaml — OOXML docProps L1 清洗处置表
+#
+# 只作用于 OOXML 容器（.docx/.pptx/.xlsx 家族）内的 docProps/core.xml 与 docProps/app.xml。
+# _office.rewrite_ooxml 读本表，在【原始 XML 字节】上做正则靶向替换（硬阻塞——禁用
+# xml.etree 整树重序列化：实测会把前缀改写为 ns0:、丢 xmlns:dcterms 声明、xsi:type 里
+# QName 残留引用未声明前缀 → Word 报"内容有问题"）。xml.etree 只用于验证结果可解析。
+#
+# action 语义：
+#   empty        — 元素内容置空，改写为自闭合 <pfx:local/>（保留原前缀），每字段至多一次
+#   set          — 元素内容替换为 value（如 revision→"1"、TotalTime→"0"）
+#   keep_report  — L1 不动，仅在报告里作为"已保留的时间/行为痕迹"披露——时间=行为痕迹非身份，
+#                  改写等于伪造历史，故不动
+#   keep         — 用户创作内容，L1 不动也不特别报数（title/subject 等）
+#
+# localname 按【本地名】匹配（忽略命名空间前缀，前缀在替换时按源保留）。app.xml 元素通常无前缀，
+# core.xml 元素带 cp:/dc:/dcterms: 前缀——两者本表统一只写 localname。
+
+core_properties:
+  - localname: creator
+    action: empty
+  - localname: lastModifiedBy
+    action: empty
+  - localname: revision
+    action: set
+    value: "1"
+  - localname: created
+    action: keep_report
+  - localname: modified
+    action: keep_report
+  - localname: lastPrinted
+    action: keep_report
+  - localname: title
+    action: keep
+  - localname: subject
+    action: keep
+  - localname: description
+    action: keep
+  - localname: keywords
+    action: keep
+  - localname: category
+    action: keep
+
+app_properties:
+  - localname: Company
+    action: empty
+  - localname: Manager
+    action: empty
+  - localname: Template
+    action: empty
+  - localname: HyperlinkBase
+    action: empty
+  - localname: HyperlinksBase
+    action: empty
+  - localname: TotalTime
+    action: set
+    value: "0"
+  - localname: Application
+    action: keep
+  - localname: AppVersion
+    action: keep

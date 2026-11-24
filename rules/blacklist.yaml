@@ -1,0 +1,183 @@
+# blacklist.yaml — 文件级删除模式
+# 每组：modes（适用的交付模式）、optional_keep（是否列入 dry-run "需用户裁决"区）、patterns（glob 风格匹配）
+# 开关语义：--keep-ai-context 仅整组保留 ai_scaffolding（代码按组名硬编码）；
+# 其余 optional 组想保留个别文件，走 deliver.config.yaml.keep 逐条救回
+
+groups:
+  secrets:
+    description: API key / token / 证书 / 密码文件
+    modes: [dev, user]
+    optional_keep: false
+    patterns:
+      - ".env"
+      - ".env.*"
+      - "*.pem"
+      - "*.key"
+      - "*.p12"
+      - "*.pfx"
+      - "credentials"
+      - "credentials.*"
+      - "secrets"
+      - "secrets.*"
+      - "secret.*"
+      - ".npmrc"
+      - ".pypirc"
+      - ".netrc"
+      - "id_rsa"
+      - "id_rsa.*"
+      - "id_ed25519"
+      - "id_ed25519.*"
+      # 目录级兜底（任意深度）——覆盖 secrets/db.yml、config/credentials/x.json 这类路径。
+      # 密钥的漏报不可容忍，宁可误报（keep 可救、删除清单可见）
+      - "**/secrets/**"
+      - "**/secret/**"
+      - "**/credentials/**"
+      - "**/.secrets/**"
+
+  vcs:
+    description: 版本控制内部目录
+    modes: [dev, user]
+    optional_keep: false
+    patterns:
+      - ".git/"
+      - ".svn/"
+      - ".hg/"
+      - ".bzr/"
+
+  build_artifacts:
+    description: '可分发构建产物——user 档必删（user 靠 user.entry 机制按需回带所需产物）；dev 档见 build_artifacts_dev（裁决区可 keep 救回）。纯本机缓存已拆至 tool_caches'
+    modes: [user]
+    optional_keep: false
+    patterns:
+      - "dist/"     # 命中 dist/bundle.js；反例 src/dist/ 不命中（目录模式锚定项目顶层）
+      - "build/"
+      - "out/"
+
+  build_artifacts_dev:
+    description: '默认翻转：构建产物在 dev 档也默认删（进裁决区，keep 可救回）。实锤——sourcemap（*.js.map 内嵌 /Users/<name> 全量源路径）、PyInstaller exe 内嵌打包机用户名，二进制内容扫描够不到、只能文件级删；贡献者确要预构建产物，`keep: ["dist/"]` 一行救回'
+    modes: [dev]
+    optional_keep: true
+    patterns:
+      - "dist/"     # 反例 src/dist/ 不命中（目录模式锚定项目顶层）
+      - "build/"
+      - "out/"
+
+  tool_caches:
+    description: '纯本机工具缓存与依赖目录——任何受众都不需要别人的缓存，全模式必删'
+    modes: [dev, user]
+    optional_keep: false
+    patterns:
+      - "node_modules/"   # 与 _HARD_SKIP_DIRS 双保险：walk 已按目录名任意层级剪枝，此条防未来改动硬跳名单后失守
+      - "__pycache__/"    # 同上双保险
+      - "*.pyc"
+      - "*.pyo"
+      - ".pytest_cache/"  # 里面有 README.md 等会被当成文档的文件
+      - ".tox/"           # 整套虚拟环境，含大量 *.py
+      - ".mypy_cache/"    # 海量 *.json 缓存
+      - ".ruff_cache/"
+      - ".gradle/"
+      - ".nyc_output/"
+      - "coverage/"       # 覆盖率输出属本机缓存而非可分发产物，从 build_artifacts 移入
+      - ".coverage"
+      - ".next/"          # 框架构建缓存，可再生，dev 也不该带
+      - ".nuxt/"
+      - "target/"         # Rust 构建缓存；极少数项目 target/ 是手写目录——误报侧，dry-run 删除清单可见，config.keep 可救
+      - ".brief-cache/"   # 项目简报类工具的本地缓存，常含本机绝对路径；只匹配项目顶层，sub/.brief-cache/ 不命中
+
+  ide_os:
+    description: IDE 与操作系统元数据
+    modes: [dev, user]
+    optional_keep: false
+    patterns:
+      - ".vscode/"
+      - ".idea/"
+      - "*.swp"
+      - "*.swo"
+      - ".DS_Store"
+      - "Thumbs.db"
+      - "desktop.ini"
+      - "*.lnk"           # Windows 快捷方式：内部以二进制形式存着本机路径，对别人也没有用
+
+  logs_temp:
+    description: 日志、临时文件、本机备份快照与 Office/LibreOffice 锁文件
+    modes: [dev, user]
+    optional_keep: false
+    patterns:
+      - "*.log"
+      - "*.tmp"
+      - "*.bak"
+      - "*.orig"
+      - "tmp/"
+      - "temp/"
+      - "backup/"       # 根级整项目快照（土版本控制）——未脱敏历史可能含 secrets，风险同 secrets 级：必删、开关不可复活、叠加建议零否决权；个别文件确要带走用 config.keep 显式救回；反例 src/backup/ 不命中（锚定项目顶层）
+      - "~$*"           # Office 锁文件（打开中的 docx/xlsx/pptx 同目录 ~$xxx）——内嵌锁持有者用户名（前 7 字节）
+      - ".~lock.*"      # LibreOffice 锁文件（.~lock.<filename>#）——明文写入本机用户名与主机
+      - "*.wbk"         # Word 自动备份副本
+
+  latex_intermediates:
+    description: 'LaTeX 编译中间产物（可再生、零信息价值，dev/user 都不该带）。`.bbl` 有意不进本组：arXiv/期刊硬性要求随稿提交，且为纯参考文献、零隐私。要清用 config.remove。`*.out` 同理不进（与 a.out、tests/*.out golden 撞名）。`*.log` 已归 logs_temp 不重复。（`_minted*` 未写末尾 / ——match_pattern 的目录分支按字面前缀匹配、不做 glob；`_minted*` 无斜杠走 fnmatch 才能命中 _minted-<jobname>/ 目录内容）'
+    modes: [dev, user]
+    optional_keep: false
+    patterns:
+      - "*.aux"
+      - "*.synctex*"    # 命中 paper.synctex 与 paper.synctex.gz
+      - "*.fls"
+      - "*.fdb_latexmk"
+      - "*.blg"
+      - "*.bcf"
+      - "*.run.xml"
+      - "*.toc"
+      - "*.lof"
+      - "*.lot"
+      - "*.nav"
+      - "*.snm"
+      - "*.vrb"
+      - "_minted*"      # minted 宏包的临时目录 _minted-<jobname>/（见组注释：无末尾 / 是有意）
+
+  ai_scaffolding:
+    description: "AI 开发脚手架（议事/规划/会议记录），默认删，--keep-ai-context 可保留。注意 .claude/skills/ 是 AI 产物（用户写的 skill 本身），不在此列。"
+    modes: [dev, user]
+    optional_keep: true
+    patterns:
+      - "CLAUDE.md"
+      - "AGENTS.md"
+      - "GEMINI.md"
+      - ".claude/agents/"
+      - ".claude/commands/"
+      - ".claude/settings.json"
+      - ".claude/settings.local.json"
+      - ".codex/"
+      - ".cursor/"
+      - ".aider*"
+      - ".specstory/"
+      - "docs/superpowers/"
+      - "brief/"
+      - "meetings/"
+
+  # 注：`.claude/skills/` 故意 NOT 列入 blacklist——它是 AI 产物本身（用户写的 skill），
+  # 跟 .claude/agents/（议事脚手架）必须分开对待。
+
+  local_workspace:
+    description: '本机标准工作区痕迹（常见的个人工作区文件）——默认删且 --keep-ai-context 不覆盖本组；保留个别文件（如 log/lessons-learned/ 精选笔记）用 deliver.config.yaml.keep 逐条救回。work/ 与 resource/ 有意不列入——work/ 是程序本体（删则掏空交付物），resource/ 可能含要交付的 assets'
+    modes: [dev, user]
+    optional_keep: true
+    patterns:
+      - "log/"          # 命中 log/progress.md、log/lessons-learned/*.md；反例 src/log/ 日志模块不命中（锚定项目顶层）——误报侧，进裁决区
+      - "plan/"         # 命中 plan/tasks.md；反例 src/plan/ 不命中；顶层公开路线图属残余误报——进裁决区由用户定
+      - "PROJECT.md"    # 状态账本（frontmatter 记 phase/status）；无斜杠模式按 basename 匹配任意深度，docs/PROJECT.md 也命中——误报侧，keep 可救
+
+  deliveryman_config:
+    description: 'deliveryman 项目级配置——custom_redactions 里常含真实本机路径字面量（裁决固化机制会鼓励用户写入），默认不外发；有意公开自己打包配置的项目用 keep 救回。模式必须精确匹配、禁用通配——templates/deliver.config.example.yaml 这类示例模板必须能正常外发'
+    modes: [dev, user]
+    optional_keep: true
+    patterns:
+      - "deliver.config.yaml"
+      - "deliver.config.yml"
+
+  deliver_self:
+    description: 本 skill 产出目录——永远不会被复制进自己
+    modes: [dev, user]
+    optional_keep: false
+    patterns:
+      - "output/deliver/"
+      - "deliver/"        # 放在项目顶层的副本目录
